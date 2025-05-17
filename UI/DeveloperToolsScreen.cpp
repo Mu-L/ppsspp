@@ -76,6 +76,7 @@ static std::string PostShaderTranslateName(std::string_view value) {
 void DeveloperToolsScreen::CreateTextureReplacementTab(UI::LinearLayout *list) {
 	using namespace UI;
 	auto dev = GetI18NCategory(I18NCat::DEVELOPER);
+	auto di = GetI18NCategory(I18NCat::DIALOG);
 
 	list->Add(new ItemHeader(dev->T("Texture Replacement")));
 	list->Add(new CheckBox(&g_Config.bSaveNewTextures, dev->T("Save new textures")));
@@ -95,6 +96,26 @@ void DeveloperToolsScreen::CreateTextureReplacementTab(UI::LinearLayout *list) {
 		}
 		return true;
 	});
+
+	if (System_GetPropertyBool(SYSPROP_CAN_SHOW_FILE)) {
+		// Best string we have
+		list->Add(new Choice(di->T("Show in folder")))->OnClick.Add([=](UI::EventParams &) {
+			Path path;
+			if (PSP_IsInited()) {
+				std::string gameID = g_paramSFO.GetDiscID();
+				path = GetSysDirectory(DIRECTORY_TEXTURES) / gameID;
+			} else {
+				// Just show the root textures directory.
+				path = GetSysDirectory(DIRECTORY_TEXTURES);
+			}
+			System_ShowFileInFolder(path);
+			return UI::EVENT_DONE;
+		});
+	}
+
+	static const char *texLoadSpeeds[] = { "Slow (smooth)", "Medium", "Fast", "Instant (may stutter)" };
+	PopupMultiChoice *texLoadSpeed = list->Add(new PopupMultiChoice(&g_Config.iReplacementTextureLoadSpeed, dev->T("Replacement texture load speed"), texLoadSpeeds, 0, ARRAY_SIZE(texLoadSpeeds), I18NCat::DEVELOPER, screenManager()));
+	texLoadSpeed->SetChoiceIcon(3, ImageID("I_WARNING"));
 }
 
 void DeveloperToolsScreen::CreateGeneralTab(UI::LinearLayout *list) {
@@ -201,6 +222,13 @@ void DeveloperToolsScreen::CreateTestsTab(UI::LinearLayout *list) {
 	if (g_Config.iGPUBackend == (int)GPUBackend::VULKAN || g_Config.iGPUBackend == (int)GPUBackend::OPENGL) {
 		list->Add(new Choice(dev->T("GPU Driver Test")))->OnClick.Handle(this, &DeveloperToolsScreen::OnGPUDriverTest);
 	}
+
+	auto memmapTest = list->Add(new Choice(dev->T("Memory map test")));
+	memmapTest->OnClick.Add([this](UI::EventParams &e) {
+		MemoryMapTest();
+		return UI::EVENT_DONE;
+	});
+	memmapTest->SetEnabled(PSP_IsInited());
 }
 
 void DeveloperToolsScreen::CreateDumpFileTab(UI::LinearLayout *list) {
@@ -297,6 +325,14 @@ void DeveloperToolsScreen::CreateAudioTab(UI::LinearLayout *list) {
 	list->Add(new CheckBox(&g_Config.bForceFfmpegForAudioDec, dev->T("Use FFMPEG for all compressed audio")));
 }
 
+void DeveloperToolsScreen::CreateNetworkTab(UI::LinearLayout *list) {
+	using namespace UI;
+	auto dev = GetI18NCategory(I18NCat::DEVELOPER);
+	auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
+	list->Add(new ItemHeader(ms->T("Networking")));
+	list->Add(new CheckBox(&g_Config.bDontDownloadInfraJson, dev->T("Don't download infra-dns.json")));
+}
+
 void DeveloperToolsScreen::CreateGraphicsTab(UI::LinearLayout *list) {
 	using namespace UI;
 	auto dev = GetI18NCategory(I18NCat::DEVELOPER);
@@ -309,6 +345,7 @@ void DeveloperToolsScreen::CreateGraphicsTab(UI::LinearLayout *list) {
 
 	list->Add(new ItemHeader(sy->T("General")));
 	list->Add(new CheckBox(&g_Config.bVendorBugChecksEnabled, dev->T("Enable driver bug workarounds")));
+	list->Add(new CheckBox(&g_Config.bShaderCache, dev->T("Enable shader cache")));
 
 	static const char *ffModes[] = { "Render all frames", "", "Frame Skipping" };
 	PopupMultiChoice *ffMode = list->Add(new PopupMultiChoice(&g_Config.iFastForwardMode, dev->T("Fast-forward mode"), ffModes, 0, ARRAY_SIZE(ffModes), I18NCat::GRAPHICS, screenManager()));
@@ -419,6 +456,9 @@ void DeveloperToolsScreen::CreateTabs() {
 	});
 	AddTab("Graphics", ms->T("Graphics"), [this](UI::LinearLayout *parent) {
 		CreateGraphicsTab(parent);
+	});
+	AddTab("Networking", ms->T("Networking"), [this](UI::LinearLayout *parent) {
+		CreateNetworkTab(parent);
 	});
 	AddTab("Audio", ms->T("Audio"), [this](UI::LinearLayout *parent) {
 		CreateAudioTab(parent);
@@ -579,6 +619,18 @@ void DeveloperToolsScreen::update() {
 	UIDialogScreenWithBackground::update();
 	allowDebugger_ = !WebServerStopped(WebServerFlags::DEBUGGER);
 	canAllowDebugger_ = !WebServerStopping(WebServerFlags::DEBUGGER);
+}
+
+void DeveloperToolsScreen::MemoryMapTest() {
+	int sum = 0;
+	for (uint64_t addr = 0; addr < 0x100000000ULL; addr += 0x1000) {
+		const u32 addr32 = (u32)addr;
+		if (Memory::IsValidAddress(addr32)) {
+			sum += Memory::ReadUnchecked_U32(addr32);
+		}
+	}
+	// Just to force the compiler to do things properly.
+	INFO_LOG(Log::JIT, "Total sum: %08x", sum);
 }
 
 static bool RunMemstickTest(std::string *error) {
