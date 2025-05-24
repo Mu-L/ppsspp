@@ -230,6 +230,7 @@ public:
 	int bHighQualityDepth;
 	bool bReplaceTextures;
 	bool bSaveNewTextures;
+	int iReplacementTextureLoadSpeed;
 	bool bIgnoreTextureFilenames;
 	int iTexScalingLevel; // 0 = auto, 1 = off, 2 = 2x, ..., 5 = 5x
 	int iTexScalingType; // 0 = xBRZ, 1 = Hybrid
@@ -315,7 +316,6 @@ public:
 	bool bShowRegionOnGameIcon;
 	bool bShowIDOnGameIcon;
 	float fGameGridScale;
-	bool bShowOnScreenMessages;
 	int iBackgroundAnimation;  // enum BackgroundAnimation
 	bool bTransparentBackground;
 
